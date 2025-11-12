@@ -8,7 +8,8 @@ from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.models import ThirukuralOut
+from src.api.models import ThirukuralOut, AnalyzeKuralIn, AnalyzeKuralOut
+from src.api.ai_service import analyze_kural_for_user
 
 # Configure FastAPI app with metadata and tags for OpenAPI
 app = FastAPI(
@@ -170,3 +171,39 @@ def get_random_thirukural() -> ThirukuralOut:
     item = random.choice(_DATASET)
     # Pydantic model will enforce the schema and types
     return ThirukuralOut(**item)
+
+
+# PUBLIC_INTERFACE
+@app.post(
+    "/api/v1/thirukural/analyze",
+    response_model=AnalyzeKuralOut,
+    tags=["Thirukural"],
+    summary="Analyze a Thirukural (AI placeholder)",
+    description=(
+        "Accepts a Thirukural (number, Tamil text, and English translation) and returns a mock, "
+        "deterministic explanation tailored for “Al Ayman” unless OpenAI is configured and external calls are enabled. "
+        "Environment variables: OPENAI_API_KEY, OPENAI_MODEL (default 'gpt-5-nano'), DISABLE_EXTERNAL_CALLS (default 'true')."
+    ),
+)
+def analyze_thirukural(payload: AnalyzeKuralIn) -> AnalyzeKuralOut:
+    """
+    Analyze a specific Thirukural and return an explanation.
+
+    Parameters:
+        payload (AnalyzeKuralIn): Contains number, kural (Tamil), and translation (English).
+
+    Returns:
+        AnalyzeKuralOut: Explanation tailored for “Al Ayman”, indicating whether an external AI call was made.
+
+    Notes:
+        The actual external OpenAI call is gated behind environment variables.
+        If OPENAI_API_KEY is not provided or DISABLE_EXTERNAL_CALLS is true, a deterministic placeholder is returned.
+    """
+    try:
+        result = analyze_kural_for_user(payload.dict(), user_name="Al Ayman")
+        return AnalyzeKuralOut(**result)
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve)) from ve
+    except Exception:
+        # Avoid leaking internal details
+        raise HTTPException(status_code=500, detail="Unable to analyze the Kural at this time.")
