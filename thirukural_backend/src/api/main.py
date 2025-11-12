@@ -42,7 +42,18 @@ _DATA_FILE_PATH = os.path.join(os.path.dirname(__file__), "data", "thirukural.js
 
 
 def _load_dataset() -> List[Dict[str, Any]]:
-    """Load the thirukural dataset from JSON with minimal validation and UTF-8 handling."""
+    """Load the thirukural dataset from JSON, normalizing to the stable API shape.
+
+    Supports both:
+    - Old shape: { "number", "kural", "translation", "section"?, "chapter"? }
+    - New shape: { "Number", "Line1", "Line2", "Translation", "explanation"?, "couplet"?, ... }
+
+    Mapping rules:
+    - number  <- Number (int) OR number (int)
+    - kural   <- (Line1 + "\n" + Line2) OR kural
+    - translation <- Translation OR couplet OR explanation
+    - section, chapter are optional passthrough if present
+    """
     try:
         with open(_DATA_FILE_PATH, "r", encoding="utf-8") as f:
             data: Any = json.load(f)
@@ -55,27 +66,66 @@ def _load_dataset() -> List[Dict[str, Any]]:
         raise RuntimeError("Dataset must be a JSON array of objects")
 
     normalized: List[Dict[str, Any]] = []
-    for idx, item in enumerate(data, start=1):
+
+    def _get_number(obj: Dict[str, Any]) -> Any:
+        # Prefer new schema "Number", fallback to old "number"
+        num = obj.get("Number", obj.get("number"))
+        # Try convert numeric strings safely
+        if isinstance(num, str):
+            if num.isdigit():
+                return int(num)
+            try:
+                return int(float(num))
+            except Exception:
+                return None
+        return num
+
+    def _get_kural(obj: Dict[str, Any]) -> str | None:
+        # Prefer composed Tamil lines if present
+        line1 = obj.get("Line1")
+        line2 = obj.get("Line2")
+        if isinstance(line1, str) and isinstance(line2, str):
+            composed = f"{line1.strip()}\n{line2.strip()}"
+            if composed.strip():
+                return composed
+        # Fallback to existing "kural" if present
+        k = obj.get("kural")
+        return k if isinstance(k, str) and k.strip() else None
+
+    def _get_translation(obj: Dict[str, Any]) -> str | None:
+        # Priority: Translation -> couplet -> explanation
+        for key in ("Translation", "couplet", "explanation", "translation"):
+            val = obj.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return None
+
+    for item in data:
         if not isinstance(item, dict):
-            # Skip invalid entries but continue
             continue
 
-        # Minimal shape validation
-        number = item.get("number")
-        kural = item.get("kural")
-        translation = item.get("translation")
+        number = _get_number(item)
+        kural = _get_kural(item)
+        translation = _get_translation(item)
 
+        # Validate required fields
         if not isinstance(number, int) or not isinstance(kural, str) or not isinstance(translation, str):
-            # Skip if required fields are missing or wrong types
             continue
+
+        # Optional metadata if present
+        section = item.get("section")
+        chapter = item.get("chapter")
+        # Coerce non-strings to None for optional fields
+        section = section if isinstance(section, str) else None
+        chapter = chapter if isinstance(chapter, str) else None
 
         normalized.append(
             {
                 "number": number,
                 "kural": kural,
                 "translation": translation,
-                "section": item.get("section"),
-                "chapter": item.get("chapter"),
+                "section": section,
+                "chapter": chapter,
             }
         )
 
