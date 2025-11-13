@@ -8,6 +8,5 @@ export PORT="${PORT:-3001}"
 
 chmod +x "$(realpath "$0")" >/dev/null 2>&1 || true
 
-# Prefer module entrypoint to ensure proper package resolution
-python -m src.api --host "${HOST}" --port "${PORT}" || \
-uvicorn src.api.main:app --host "${HOST}" --port "${PORT}"
+# Run uvicorn as a module per preview system expectation (foreground, no backgrounding)
+python -m uvicorn src.api.main:app --host "${HOST}" --port "${PORT}"

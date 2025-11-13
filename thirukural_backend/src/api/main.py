@@ -65,6 +65,18 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get(
+        "/health",
+        summary="Root health check",
+        description="Simple readiness probe at /health returning 200.",
+        tags=["system"],
+        response_model=dict,
+    )
+    # PUBLIC_INTERFACE
+    def root_health() -> dict:
+        """Simple root health endpoint for infrastructure readiness checks."""
+        return {"status": "ok"}
+
+    @app.get(
         "/api/random",
         summary="Get a random Thirukural",
         description="Returns a random Thirukural couplet and its English meaning.",
